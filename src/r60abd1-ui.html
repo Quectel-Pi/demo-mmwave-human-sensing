@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>R60ABD1</title>
+<style>
+:root{
+  --bg:#f5f7fb;--card:#fff;--ink:#1d2939;--muted:#667085;--faint:#98a2b3;--line:#e8ecf3;
+  --primary:#3b6cf4;--primary-soft:#eaf0ff;
+  --resp:#0d9488;--heart:#e11d48;--amp:#d97706;
+  --ok:#15803d;--ok-soft:#e7f6ec;--warn:#b45309;--warn-soft:#fff4de;--bad:#b91c1c;--bad-soft:#fdeaea;--idle-soft:#eef1f6;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 6px 20px rgba(16,24,40,.05);
+  font:15px/1.55 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--ink);background:var(--bg);
+}
+*{box-sizing:border-box}
+body{margin:0}
+[hidden]{display:none!important}
+header{background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.bar{max-width:1200px;margin:auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#5b8cff,#3b6cf4);display:grid;place-items:center;color:#fff}
+.logo svg{width:20px;height:20px}
+h1{font-size:18px;margin:0;line-height:1.2}
+.brand small{color:var(--muted);font-size:12px}
+.tools{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.seg{display:inline-flex;background:var(--idle-soft);border-radius:10px;padding:3px}
+.seg button{border:0;background:transparent;color:var(--muted);padding:6px 16px;border-radius:8px;font:inherit;font-size:14px;cursor:pointer}
+.seg button[aria-pressed=true]{background:#fff;color:var(--primary);font-weight:600;box-shadow:0 1px 3px rgba(16,24,40,.12)}
+.seg button:disabled{cursor:default}
+.lang{font:inherit;font-size:13px;font-weight:600;color:var(--primary);background:#fff;border:1px solid var(--line);border-radius:999px;padding:5px 14px;cursor:pointer}
+.lang:hover{background:var(--primary-soft)}
+.chip{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:#fff}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.chip[data-state=ok] .dot{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.18)}
+.chip[data-state=busy] .dot{background:#f59e0b}
+.chip[data-state=bad] .dot{background:#ef4444}
+main{max-width:1200px;margin:auto;padding:22px 24px 40px;display:grid;gap:20px}
+.banner{padding:11px 16px;border-radius:12px;font-size:14px}
+.banner.note{background:var(--warn-soft);color:var(--warn)}
+.banner.alert{background:var(--bad-soft);color:var(--bad);font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:18px 20px;min-width:0}
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.label{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+.big{font-size:38px;font-weight:650;line-height:1.15;margin:8px 0 6px;letter-spacing:-.5px}
+.big small{font-size:14px;font-weight:400;color:var(--muted);margin-left:6px;letter-spacing:0}
+.big.dim{color:var(--faint)}
+.sub{font-size:12px;color:var(--faint);min-height:18px}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--idle-soft);color:var(--muted)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.meter{height:6px;border-radius:6px;background:var(--idle-soft);overflow:hidden;margin:4px 0 8px}
+.meter i{display:block;height:100%;width:0;border-radius:6px;background:var(--amp);transition:width .4s}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.fact{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.fact span{display:block;font-size:12px;color:var(--muted)}.fact b{font-size:17px;font-weight:600}
+.section-title{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:6px 2px 10px}
+.section-title h2{font-size:16px;margin:0}.section-title span{font-size:12px;color:var(--faint)}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px}
+.pair>*,.hero>*{min-width:0}
+.chart{position:relative;margin-top:10px}
+.chart canvas{display:block}
+.tip{position:absolute;pointer-events:none;background:rgba(29,41,57,.92);color:#fff;font-size:12px;line-height:1.5;padding:6px 10px;border-radius:8px;white-space:nowrap;transform:translate(-50%,-110%);z-index:3}
+.card h3{font-size:14px;margin:0;font-weight:600}
+.card h3 small{font-weight:400;color:var(--faint);margin-left:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat{background:#f9fafc;border-radius:12px;padding:12px 14px}.stat span{font-size:12px;color:var(--muted)}.stat b{display:block;font-size:22px;font-weight:600;margin-top:2px}
+.rows .row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}.rows .row:last-child{border:0}
+.rows .row span{color:var(--muted)}
+.history-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.history-bar .seg button{padding:5px 12px;font-size:13px}
+.custom{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input[type=datetime-local]{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:#fff;color:var(--ink)}
+.btn{font:inherit;font-size:13px;border:1px solid var(--primary);background:var(--primary);color:#fff;border-radius:8px;padding:5px 14px;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:default}
+.links{margin-left:auto;font-size:13px;display:flex;gap:12px}
+a{color:var(--primary);text-decoration:none}a:hover{text-decoration:underline}
+.err{color:var(--bad);font-size:13px}
+.hint{color:var(--faint);font-size:12px}
+details summary{cursor:pointer;color:var(--muted);font-size:13px}
+footer{color:var(--faint);font-size:12px;text-align:center;padding:4px 0 0}
+@media (max-width:640px){.bar,main{padding-left:14px;padding-right:14px}.big{font-size:32px}.links{margin-left:0}}
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg></div>
+    <div><h1 data-i18n="h1"></h1><small>R60ABD1 · Quectel Pi M2</small></div>
+  </div>
+  <div class="tools">
+    <div class="seg" role="group" data-i18n-aria="mode_group"><button id="mode-realtime" type="button" aria-pressed="false" data-i18n="mode_realtime"></button><button id="mode-sleep" type="button" aria-pressed="false" data-i18n="mode_sleep"></button></div>
+    <div class="chip" id="connection" data-state="busy"><i class="dot"></i><span id="connection-text"></span></div>
+    <button class="lang" id="lang-toggle" type="button" aria-label="Language / 语言"></button>
+  </div>
+</div></header>
+
+<main>
+  <div id="notice" class="banner note" role="status" hidden></div>
+  <div id="alarm" class="banner alert" role="alert" hidden></div>
+
+  <section>
+    <div class="hero">
+      <article class="card">
+        <div class="label" data-i18n="presence"></div>
+        <div class="big dim"><span id="presence-text">--</span></div>
+        <div class="sub" id="presence-sub">&nbsp;</div>
+      </article>
+      <article class="card">
+        <div class="label" style="color:var(--resp)" data-i18n="resp"></div>
+        <div class="big dim"><span id="resp-val">--</span><small data-i18n="unit_bpm"></small></div>
+        <div class="sub"><span class="pill" id="resp-pill">--</span> <span id="resp-sub"></span></div>
+      </article>
+      <article class="card">
+        <div class="label" style="color:var(--heart)" data-i18n="heart"></div>
+        <div class="big dim"><span id="heart-val">--</span><small data-i18n="unit_bpm"></small></div>
+        <div class="sub" id="heart-sub">&nbsp;</div>
+      </article>
+      <article class="card">
+        <div class="label" style="color:var(--amp)" data-i18n="amp"></div>
+        <div class="big dim"><span id="amp-val">--</span><small>/ 100</small></div>
+        <div class="meter"><i id="amp-bar"></i></div>
+        <div class="sub" id="amp-sub">&nbsp;</div>
+      </article>
+    </div>
+    <div id="flow-hint" class="banner note" style="margin-top:16px" hidden></div>
+    <div class="facts" style="margin-top:16px">
+      <div class="fact"><span data-i18n="motion"></span><b id="motion-text">--</b></div>
+      <div class="fact"><span data-i18n="distance"></span><b id="distance-text">--</b></div>
+      <div class="fact"><span data-i18n="range"></span><b id="range-text">--</b></div>
+    </div>
+  </section>
+
+  <section id="waveforms" hidden>
+    <div class="section-title"><h2 data-i18n="waves_title"></h2><span data-i18n="waves_sub"></span></div>
+    <div class="pair">
+      <article class="card"><h3 style="color:var(--resp)" data-i18n="wave_resp"></h3><div class="chart"><canvas id="resp-wave"></canvas></div></article>
+      <article class="card"><h3 style="color:var(--heart)" data-i18n="wave_heart"></h3><div class="chart"><canvas id="heart-wave"></canvas></div></article>
+    </div>
+  </section>
+
+  <section id="sleep-section" hidden>
+    <div class="section-title"><h2 data-i18n="sleep_title"></h2><span data-i18n="sleep_sub"></span></div>
+    <div class="grid" id="sleep"></div>
+    <div class="pair" style="margin-top:16px">
+      <article class="card"><h3 data-i18n="summary_title"></h3><div class="rows" id="summary"></div></article>
+      <article class="card"><h3 data-i18n="analysis_title"></h3><div class="hint" id="analysis-note"></div><div class="rows" id="analysis"></div></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title"><h2 data-i18n="history_title"></h2><span id="history-meta"></span></div>
+    <article class="card">
+      <div class="history-bar">
+        <div class="seg" id="history-presets" role="group" data-i18n-aria="range_group">
+          <button type="button" data-hours="1" aria-pressed="false" data-i18n="h1h"></button>
+          <button type="button" data-hours="6" aria-pressed="false" data-i18n="h6h"></button>
+          <button type="button" data-hours="12" aria-pressed="true" data-i18n="h12h"></button>
+          <button type="button" data-hours="24" aria-pressed="false" data-i18n="h24h"></button>
+          <button type="button" data-hours="0" aria-pressed="false" data-i18n="hcustom"></button>
+        </div>
+        <form class="custom" id="history-form" hidden>
+          <input id="history-start" type="datetime-local" step="1" required>
+          <span class="hint" data-i18n="to"></span>
+          <input id="history-end" type="datetime-local" step="1" required>
+          <button class="btn" type="submit" data-i18n="query"></button>
+        </form>
+        <span class="links"><a id="history-csv" hidden data-i18n="export_csv"></a><a id="history-jsonl" hidden data-i18n="export_jsonl"></a></span>
+      </div>
+      <div id="history-error" class="err" hidden></div>
+      <div style="margin-top:16px">
+        <div class="label"><span data-i18n="hist_presence"></span> <span class="hint" id="presence-legend"></span></div>
+        <div class="chart"><canvas id="history-presence"></canvas></div>
+      </div>
+      <div class="pair" style="margin-top:12px">
+        <div><h3 style="color:var(--resp)"><span data-i18n="hist_resp"></span><small data-i18n="unit_bpm"></small></h3><div class="chart"><canvas id="history-resp"></canvas></div></div>
+        <div><h3 style="color:var(--heart)"><span data-i18n="hist_heart"></span><small data-i18n="unit_bpm"></small></h3><div class="chart"><canvas id="history-heart"></canvas></div></div>
+      </div>
+      <div style="margin-top:12px">
+        <h3 style="color:var(--amp)"><span data-i18n="hist_amp"></span><small>0-100</small></h3><div class="chart"><canvas id="history-amp"></canvas></div>
+      </div>
+      <details id="history-alarms-box" style="margin-top:12px" hidden><summary data-i18n="alarm_log"></summary><div class="rows" id="history-alarms"></div></details>
+    </article>
+  </section>
+
+  <details class="card" id="device">
+    <summary data-i18n="device"></summary>
+    <div class="rows" id="diagnostics" style="margin-top:8px"></div>
+  </details>
+  <footer data-i18n="footer"></footer>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* ---------- i18n ---------- */
+const I18N = {
+  zh: {
+    title: "R60ABD1 睡眠呼吸雷达", h1: "睡眠呼吸雷达", mode_group: "工作模式", mode_realtime: "实时模式", mode_sleep: "睡眠模式",
+    connecting: "正在连接", switching: "切换中", stopped: "采集已停止", initializing: "初始化中", connected: "已连接",
+    conn_lost: "连接中断", switch_failed: "切换失败", fps: n => n.toFixed(1) + " 帧/秒",
+    presence: "人体检测", resp: "呼吸", heart: "心率", amp: "体动幅度", unit_bpm: "次/分",
+    motion: "运动状态", distance: "人体距离", range: "探测范围",
+    present_yes: "有人", present_no: "无人", waiting: "等待数据", measuring: "测量中", steady: "稳定检测后显示",
+    amp_none: "无人", amp_still: "静止（仅呼吸）", amp_slight: "轻微动作", amp_walk: "走动", amp_big: "大幅运动",
+    ago_now: "刚刚更新", ago_s: n => n + " 秒前更新", ago_m: n => n + " 分钟前更新",
+    hint_nodata: "驱动没有收到雷达数据，请检查串口接线和供电。",
+    hint_range: "模组判定目标在探测范围外：请正对雷达，距离约 1 米静坐。",
+    hint_vitals: "模组尚未测出呼吸/心率：请保持静坐，距离 0.4–1.5 米，面向雷达。",
+    waves_title: "模组波形", waves_sub: "最近 60 秒 · 相对幅值", wave_resp: "呼吸波形", wave_heart: "心跳波形", wave_wait: "等待模组上报波形…",
+    sleep_title: "睡眠分析", sleep_sub: "模组每 10 分钟更新", summary_title: "近 10 分钟平均", analysis_title: "整夜睡眠报告",
+    history_title: "本地历史", range_group: "时间范围", h1h: "1小时", h6h: "6小时", h12h: "12小时", h24h: "24小时", hcustom: "自定义",
+    to: "至", query: "查询", export_csv: "导出 CSV", export_jsonl: "导出 JSONL",
+    hist_presence: "人体存在", legend: "绿色：有人　灰色：无人", hist_resp: "呼吸次数", hist_heart: "心率", hist_amp: "体动幅度",
+    alarm_log: "告警记录", device: "设备状态", footer: "数据来自雷达模组算法，仅供参考，不能作为医学诊断依据。",
+    diag_labels: ["累计收帧", "协议错误", "本次丢失", "呼吸波形包", "心跳波形包"],
+    hist_empty: "该时段暂无数据", hist_read_fail: "读取失败", hist_none: "该时段暂无记录",
+    skipped: n => " · 已跳过 " + n + " 条不完整记录",
+    tip_avg: (avg, lo, hi, unit) => "平均 " + avg + " · 范围 " + lo + "–" + hi + unit,
+    unit_tip_bpm: " 次/分",
+    err_range: "请选择有效的起止时间", err_http: n => "历史数据读取失败（" + n + "）", err_schema: "页面与服务版本不一致，请同步更新并重启服务",
+    err_generic: "历史数据读取失败",
+    alarm_2: "重度告警", alarm_1: "轻度告警", alarm_0: "告警解除",
+    banner_2: "体征告警：静止状态下呼吸与心率同时偏低。", banner_1: "体征提醒：静止状态下呼吸或心率偏低。",
+    seg_present: "有人", seg_absent: "无人",
+    n_switching: "正在切换模式，请稍候。", n_stopped: "采集已停止，请检查设备连接。", n_stopped_err: e => "采集已停止：" + e,
+    n_error: e => "采集提示：" + e, n_monitors: "部分检测开关未确认，数据可能不完整。",
+    n_down: "本地服务不可用，页面数据可能已过期。", n_switch_fail: e => "切换失败：" + e,
+    f_bed: "床状态", f_stage: "睡眠分期", f_awake: "清醒时长", f_light: "浅睡时长", f_deep: "深睡时长", f_score: "睡眠评分", f_error: "睡眠异常", f_quality: "质量评级",
+    u_min: "分钟", u_score: "分", away: "离床 / 无人",
+    summary_labels: ["睡眠阶段", "平均呼吸 次/分", "平均心率 次/分", "翻身次数", "大幅体动 %", "小幅体动 %"],
+    analysis_labels: ["评分", "总时长 分钟", "清醒 %", "浅睡 %", "深睡 %", "离床 分钟", "离床次数", "翻身次数", "平均呼吸 次/分", "平均心率 次/分"],
+    ana_none: "尚未生成。需连续睡眠 4–12 小时。", ana_empty: "模组返回空报告：睡眠时长不足或未结束。",
+    "list.motion": ["无", "静止", "活跃"], "list.resp-status": ["未定义", "正常", "偏高", "偏低", "无"], "list.range": ["范围外", "范围内"],
+    "list.bed": ["离床", "在床", "无"], "list.stage": ["深睡", "浅睡", "清醒", "无"],
+    "list.sleep-error": ["不足4小时", "超过12小时", "异常无人", "无"], "list.quality": ["无", "良好", "一般", "较差"]
+  },
+  en: {
+    title: "R60ABD1 Sleep & Vitals Radar", h1: "Sleep & Vitals Radar", mode_group: "Mode", mode_realtime: "Real-time", mode_sleep: "Sleep",
+    connecting: "Connecting", switching: "Switching", stopped: "Collector stopped", initializing: "Initializing", connected: "Connected",
+    conn_lost: "Disconnected", switch_failed: "Switch failed", fps: n => n.toFixed(1) + " fps",
+    presence: "Presence", resp: "Respiration", heart: "Heart rate", amp: "Body movement", unit_bpm: "bpm",
+    motion: "Motion", distance: "Distance", range: "Detection range",
+    present_yes: "Present", present_no: "Absent", waiting: "Waiting for data", measuring: "Measuring", steady: "Shown once stable",
+    amp_none: "No one", amp_still: "Still (breathing only)", amp_slight: "Slight movement", amp_walk: "Walking", amp_big: "Vigorous movement",
+    ago_now: "Just now", ago_s: n => n + " s ago", ago_m: n => n + " min ago",
+    hint_nodata: "The driver is not receiving radar data. Check the UART wiring and power.",
+    hint_range: "The module reports the target out of range. Face the radar and sit still about 1 m away.",
+    hint_vitals: "No respiration/heart rate measured yet. Sit still 0.4–1.5 m from the radar, facing it.",
+    waves_title: "Module waveforms", waves_sub: "Last 60 s · relative amplitude", wave_resp: "Respiration waveform", wave_heart: "Heartbeat waveform", wave_wait: "Waiting for waveform from module…",
+    sleep_title: "Sleep analysis", sleep_sub: "Updated every 10 min by the module", summary_title: "10-minute average", analysis_title: "Overnight report",
+    history_title: "Local history", range_group: "Time range", h1h: "1 h", h6h: "6 h", h12h: "12 h", h24h: "24 h", hcustom: "Custom",
+    to: "to", query: "Query", export_csv: "Export CSV", export_jsonl: "Export JSONL",
+    hist_presence: "Presence", legend: "Green: present  Gray: absent", hist_resp: "Respiration", hist_heart: "Heart rate", hist_amp: "Body movement",
+    alarm_log: "Alert log", device: "Device status", footer: "Data comes from the radar module's algorithm. For reference only, not for medical diagnosis.",
+    diag_labels: ["Frames received", "Protocol errors", "Lost this run", "Respiration wave packets", "Heartbeat wave packets"],
+    hist_empty: "No data in this period", hist_read_fail: "Read failed", hist_none: "No records in this period",
+    skipped: n => " · " + n + " incomplete record(s) skipped",
+    tip_avg: (avg, lo, hi, unit) => "Avg " + avg + " · range " + lo + "–" + hi + unit,
+    unit_tip_bpm: " bpm",
+    err_range: "Please choose a valid start and end time", err_http: n => "Failed to read history (" + n + ")",
+    err_schema: "Page and service versions differ. Update both and restart the service.", err_generic: "Failed to read history",
+    alarm_2: "Severe alert", alarm_1: "Mild alert", alarm_0: "Alert cleared",
+    banner_2: "Vital alert: respiration and heart rate are both low while still.", banner_1: "Vital notice: respiration or heart rate is low while still.",
+    seg_present: "Present", seg_absent: "Absent",
+    n_switching: "Switching mode, please wait.", n_stopped: "Collector stopped. Check the device connection.", n_stopped_err: e => "Collector stopped: " + e,
+    n_error: e => "Collector notice: " + e, n_monitors: "Some detection switches are unconfirmed; data may be incomplete.",
+    n_down: "Local service unavailable; the data shown may be outdated.", n_switch_fail: e => "Switch failed: " + e,
+    f_bed: "Bed", f_stage: "Sleep stage", f_awake: "Awake time", f_light: "Light sleep", f_deep: "Deep sleep", f_score: "Sleep score", f_error: "Sleep anomaly", f_quality: "Quality",
+    u_min: "min", u_score: "pts", away: "Out of bed / absent",
+    summary_labels: ["Sleep stage", "Avg respiration bpm", "Avg heart rate bpm", "Turn-overs", "Large movement %", "Small movement %"],
+    analysis_labels: ["Score", "Total min", "Awake %", "Light %", "Deep %", "Out of bed min", "Out-of-bed count", "Turn-overs", "Avg respiration bpm", "Avg heart rate bpm"],
+    ana_none: "Not generated yet. Needs 4–12 hours of continuous sleep.", ana_empty: "The module returned an empty report: sleep too short or not finished.",
+    "list.motion": ["None", "Still", "Active"], "list.resp-status": ["Undefined", "Normal", "High", "Low", "None"], "list.range": ["Out of range", "In range"],
+    "list.bed": ["Out of bed", "In bed", "None"], "list.stage": ["Deep", "Light", "Awake", "None"],
+    "list.sleep-error": ["< 4 h", "> 12 h", "Absent too long", "None"], "list.quality": ["None", "Good", "Fair", "Poor"]
+  }
+};
+let lang = "zh";
+try { lang = localStorage.getItem("r60-lang") || (/^zh/i.test(navigator.language) ? "zh" : "en"); } catch (e) { lang = /^zh/i.test(navigator.language) ? "zh" : "en"; }
+if (!I18N[lang]) lang = "zh";
+function t(key, ...args) {
+  let v = I18N[lang][key];
+  if (v === undefined) v = I18N.zh[key];
+  return typeof v === "function" ? v(...args) : v;
+}
+const locale = () => lang === "zh" ? "zh-CN" : "en-US";
+
+const COLORS = {resp: "#0d9488", heart: "#e11d48", amp: "#d97706", axis: "#98a2b3", grid: "#eef1f6"};
+const PILL = {"resp-status": ["", "ok", "warn", "warn", ""]};
+const SLEEP_FIELDS = [["bed", "f_bed", ""], ["stage", "f_stage", ""], ["awake-minutes", "f_awake", "u_min"], ["light-minutes", "f_light", "u_min"],
+  ["deep-minutes", "f_deep", "u_min"], ["score", "f_score", "u_score"], ["sleep-error", "f_error", ""], ["quality", "f_quality", ""]];
+const STALE_MS = {"amplitude": 10000, "distance-cm": 15000, "resp-per-minute": 60000, "heart-per-minute": 60000};
+const HOUR = 3600 * 1000;
+
+let session = null, cursor = 0, changing = false, requestVersion = 0, serverNow = Date.now(), lastSnapshot = null;
+let flow = {frames: null, at: 0, rate: null};
+let conn = {state: "busy", key: "connecting", args: []};
+let notes = [];
+const waveData = {"resp-wave": [], "heart-wave": []};
+let history = {hours: 12, start: 0, end: 0, data: null, busy: false, updated: 0, error: null};
+
+const msOf = ns => Number(BigInt(ns) / 1000000n);
+const pad2 = n => String(n).padStart(2, "0");
+function fmtTime(ms, withDate) {
+  const d = new Date(ms), text = pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  return withDate ? pad2(d.getMonth() + 1) + "/" + pad2(d.getDate()) + " " + text : text;
+}
+function fmtFull(ms) { return new Date(ms).toLocaleString(locale()); }
+function setText(id, text) { const e = $(id); if (e.textContent !== text) e.textContent = text; }
+function setBig(id, text, dim) { setText(id, text); $(id).parentElement.classList.toggle("dim", dim); }
+function label(key, value) { const list = t("list." + key); return list && list[value] !== undefined ? list[value] : "--"; }
+function ago(entry) {
+  const s = Math.max(0, Math.round((serverNow - msOf(entry.received_ns)) / 1000));
+  return s < 3 ? t("ago_now") : s < 90 ? t("ago_s", s) : t("ago_m", Math.round(s / 60));
+}
+function setConn(state, key, ...args) { conn = {state, key, args}; showConn(); }
+function showConn() { $("connection").dataset.state = conn.state; setText("connection-text", t(conn.key, ...conn.args)); }
+function setNotes(list) { notes = list; showNotes(); }
+function showNotes() {
+  $("notice").hidden = !notes.length;
+  $("notice").textContent = notes.map(n => t(n[0], ...n.slice(1))).join(" ");
+}
+function applyStatic() {
+  document.querySelectorAll("[data-i18n]").forEach(e => { e.textContent = t(e.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-aria]").forEach(e => e.setAttribute("aria-label", t(e.dataset.i18nAria)));
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+  document.title = t("title");
+  $("lang-toggle").textContent = lang === "zh" ? "EN" : "中文";
+}
+
+/* ---------- overview ---------- */
+function value(common, key, requirePresent, present) {
+  const entry = common[key];
+  if (!entry || !entry.values.length) return null;
+  if (requirePresent && present === false) return null;
+  if (STALE_MS[key] && serverNow - msOf(entry.received_ns) > STALE_MS[key]) return null;
+  return entry.values[0];
+}
+function renderOverview(s) {
+  const c = s.common, entry = c.presence;
+  const present = entry ? entry.values[0] === 1 : null;
+  setBig("presence-text", present === null ? "--" : present ? t("present_yes") : t("present_no"), present === null);
+  $("presence-text").style.color = present ? "var(--ok)" : "";
+  setText("presence-sub", entry ? ago(entry) : t("waiting"));
+
+  const resp = value(c, "resp-per-minute", true, present);
+  setBig("resp-val", resp === null ? "--" : resp > 0 ? String(resp) : t("measuring"), resp === null || resp === 0);
+  const status = c["resp-status"] && present !== false ? c["resp-status"].values[0] : null;
+  const pill = $("resp-pill");
+  pill.textContent = status === null ? "--" : label("resp-status", status);
+  pill.className = "pill " + (status === null ? "" : PILL["resp-status"][status] || "");
+  setText("resp-sub", resp === null && present ? t("steady") : "");
+
+  const heart = value(c, "heart-per-minute", true, present);
+  setBig("heart-val", heart === null ? "--" : heart > 0 ? String(heart) : t("measuring"), heart === null || heart === 0);
+  setText("heart-sub", heart === null && present ? t("steady") : "\u00a0");
+
+  const amp = value(c, "amplitude", false, present);
+  setBig("amp-val", amp === null ? "--" : String(amp), amp === null);
+  $("amp-bar").style.width = amp === null ? "0" : Math.min(100, amp) + "%";
+  setText("amp-sub", amp === null ? "\u00a0" : t(amp === 0 ? "amp_none" : amp === 1 ? "amp_still" : amp <= 30 ? "amp_slight" : amp <= 60 ? "amp_walk" : "amp_big"));
+
+  const motion = c.motion && present !== false ? c.motion.values[0] : (present === false ? 0 : null);
+  setText("motion-text", motion === null ? "--" : label("motion", motion));
+  const distance = value(c, "distance-cm", true, present);
+  setText("distance-text", distance === null ? "--" : distance + " cm");
+  const range = c.range ? c.range.values[0] : null;
+  setText("range-text", range === null ? "--" : label("range", range));
+  const hint = $("flow-hint");
+  const text = flow.rate === 0 ? t("hint_nodata")
+    : range === 0 ? t("hint_range")
+    : present && (resp === null || resp === 0) && (heart === null || heart === 0) ? t("hint_vitals") : "";
+  hint.hidden = !text; hint.textContent = text;
+}
+
+/* ---------- canvas helpers ---------- */
+function setupCanvas(canvas, height) {
+  const ratio = window.devicePixelRatio || 1, width = Math.max(120, canvas.parentElement.clientWidth);
+  canvas.style.width = width + "px"; canvas.style.height = height + "px";
+  canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  return {ctx, width, height};
+}
+function niceScale(lo, hi, count) {
+  if (hi - lo < 1e-9) hi = lo + 1;
+  const raw = (hi - lo) / count, mag = Math.pow(10, Math.floor(Math.log10(raw))), norm = raw / mag;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  return {min: Math.floor(lo / step) * step, max: Math.ceil(hi / step) * step, step};
+}
+function emptyState(ctx, width, height, text) {
+  ctx.fillStyle = COLORS.axis; ctx.font = "13px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(text, width / 2, height / 2);
+}
+function drawGrid(ctx, scale, left, right, top, bottom, width) {
+  ctx.font = "11px sans-serif"; ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.lineWidth = 1;
+  for (let v = scale.min; v <= scale.max + scale.step / 2; v += scale.step) {
+    const y = bottom - (v - scale.min) / (scale.max - scale.min) * (bottom - top);
+    ctx.strokeStyle = COLORS.grid; ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - right, y); ctx.stroke();
+    ctx.fillStyle = COLORS.axis; ctx.fillText(String(Math.round(v * 10) / 10), left - 6, y);
+  }
+}
+function smoothPath(ctx, points) {
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length - 1; i++) {
+    const mx = (points[i][0] + points[i + 1][0]) / 2, my = (points[i][1] + points[i + 1][1]) / 2;
+    ctx.quadraticCurveTo(points[i][0], points[i][1], mx, my);
+  }
+  if (points.length > 1) ctx.lineTo(points[points.length - 1][0], points[points.length - 1][1]);
+}
+
+/* ---------- live waveforms ---------- */
+function drawWave(id, values, color, emptyText) {
+  const {ctx, width, height} = setupCanvas($(id), 170);
+  if (values.length < 2) { emptyState(ctx, width, height, emptyText); return; }
+  const left = 36, right = 8, top = 10, bottom = height - 10;
+  let lo = Math.min(...values), hi = Math.max(...values);
+  if (hi - lo < 8) { const mid = (hi + lo) / 2; lo = mid - 4; hi = mid + 4; }
+  const scale = niceScale(lo, hi, 4);
+  drawGrid(ctx, scale, left, right, top, bottom, width);
+  const points = values.map((v, i) => [left + i * (width - left - right) / (values.length - 1),
+    bottom - (v - scale.min) / (scale.max - scale.min) * (bottom - top)]);
+  const gradient = ctx.createLinearGradient(0, top, 0, bottom);
+  gradient.addColorStop(0, color + "33"); gradient.addColorStop(1, color + "00");
+  ctx.beginPath(); smoothPath(ctx, points);
+  ctx.lineTo(points[points.length - 1][0], bottom); ctx.lineTo(points[0][0], bottom); ctx.closePath();
+  ctx.fillStyle = gradient; ctx.fill();
+  ctx.beginPath(); smoothPath(ctx, points);
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.stroke();
+}
+function drawWaves() {
+  drawWave("resp-wave", waveData["resp-wave"].flatMap(b => b.values), COLORS.resp, t("wave_wait"));
+  drawWave("heart-wave", waveData["heart-wave"].flatMap(b => b.values), COLORS.heart, t("wave_wait"));
+}
+
+/* ---------- history ---------- */
+function bindHover(canvas, find) {
+  let tip = canvas._tip;
+  if (!tip) { tip = canvas._tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; canvas.parentElement.appendChild(tip); }
+  canvas.onmousemove = event => {
+    const box = canvas.getBoundingClientRect(), x = event.clientX - box.left;
+    const hit = find(x);
+    if (!hit) { tip.hidden = true; return; }
+    tip.textContent = ""; hit.lines.forEach((line, i) => { if (i) tip.appendChild(document.createElement("br")); tip.appendChild(document.createTextNode(line)); });
+    tip.style.left = Math.min(Math.max(x, 60), box.width - 60) + "px"; tip.style.top = (hit.y || 20) + "px"; tip.hidden = false;
+  };
+  canvas.onmouseleave = () => { tip.hidden = true; };
+}
+function drawHistorySeries(id, rows, color, opts) {
+  const canvas = $(id), {ctx, width, height} = setupCanvas(canvas, 170);
+  canvas.onmousemove = null;
+  if (!rows.length) { emptyState(ctx, width, height, history.error ? t("hist_read_fail") : t("hist_empty")); return; }
+  const left = 38, right = 10, top = 10, bottom = height - 24;
+  let lo = Math.min(...rows.map(r => r[2])), hi = Math.max(...rows.map(r => r[3]));
+  if (opts.zero) lo = 0; else { lo -= 3; hi += 3; }
+  const scale = niceScale(lo, Math.max(hi, lo + 5), 4);
+  const span = history.end - history.start, x = v => left + (v - history.start) / span * (width - left - right);
+  const y = v => bottom - (v - scale.min) / (scale.max - scale.min) * (bottom - top);
+  drawGrid(ctx, scale, left, right, top, bottom, width);
+  ctx.fillStyle = COLORS.axis; ctx.font = "11px sans-serif"; ctx.textBaseline = "alphabetic";
+  const ticks = Math.max(2, Math.min(6, Math.floor(width / 110)));
+  for (let i = 0; i <= ticks; i++) {
+    const moment = history.start + span * i / ticks;
+    ctx.textAlign = i === 0 ? "left" : i === ticks ? "right" : "center";
+    ctx.fillText(fmtTime(moment, span > 24 * HOUR), left + (width - left - right) * i / ticks, height - 6);
+  }
+  const gap = span / 240 * 4, runs = [];
+  rows.forEach(r => { const last = runs[runs.length - 1]; if (last && r[0] - last[last.length - 1][0] <= gap) last.push(r); else runs.push([r]); });
+  runs.forEach(run => {
+    if (run.length > 1) {
+      ctx.beginPath();
+      run.forEach((r, i) => i ? ctx.lineTo(x(r[0]), y(r[3])) : ctx.moveTo(x(r[0]), y(r[3])));
+      for (let i = run.length - 1; i >= 0; i--) ctx.lineTo(x(run[i][0]), y(run[i][2]));
+      ctx.closePath(); ctx.fillStyle = color + "22"; ctx.fill();
+    }
+    ctx.beginPath();
+    run.forEach((r, i) => i ? ctx.lineTo(x(r[0]), y(r[1])) : ctx.moveTo(x(r[0]), y(r[1])));
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.stroke();
+    if (run.length === 1) { ctx.beginPath(); ctx.arc(x(run[0][0]), y(run[0][1]), 3, 0, 7); ctx.fillStyle = color; ctx.fill(); }
+  });
+  bindHover(canvas, px => {
+    let best = null, dist = 1e9;
+    rows.forEach(r => { const d = Math.abs(x(r[0]) - px); if (d < dist) { dist = d; best = r; } });
+    if (!best || dist > 24) return null;
+    return {y: y(best[1]), lines: [fmtFull(best[0]), t("tip_avg", best[1], best[2], best[3], opts.unit ? t(opts.unit) : "")]};
+  });
+}
+function drawHistoryPresence(segments) {
+  const canvas = $("history-presence"), {ctx, width} = setupCanvas(canvas, 30);
+  canvas.onmousemove = null;
+  const left = 38, right = 10, span = history.end - history.start, inner = width - left - right;
+  ctx.fillStyle = "#eef1f6"; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(left, 4, inner, 20, 6) : ctx.rect(left, 4, inner, 20); ctx.fill();
+  const x = v => left + (v - history.start) / span * inner;
+  segments.forEach(seg => {
+    if (seg.end < history.start) return;
+    const a = Math.max(left, x(Math.max(seg.start, history.start))), b = Math.min(left + inner, x(Math.min(seg.end, history.end)));
+    ctx.fillStyle = seg.value ? "#4ade80" : "#cfd6e2"; ctx.fillRect(a, 4, Math.max(2, b - a), 20);
+  });
+  bindHover(canvas, px => {
+    const moment = history.start + (px - left) / inner * span;
+    const seg = segments.find(item => moment >= item.start && moment <= item.end);
+    return seg ? {y: 4, lines: [seg.value ? t("seg_present") : t("seg_absent"), fmtTime(seg.start, true) + " – " + fmtTime(seg.end, true)]} : null;
+  });
+  $("presence-legend").textContent = segments.length ? t("legend") : "";
+}
+function renderHistoryText() {
+  const data = history.data, err = $("history-error");
+  err.hidden = !history.error;
+  if (history.error) err.textContent = t(history.error.key, ...history.error.args);
+  if (!data) { setText("history-meta", ""); $("history-alarms-box").hidden = true; return; }
+  const total = data.counts.resp_rate + data.counts.heart_rate + data.counts.amplitude;
+  setText("history-meta", total ? fmtTime(history.start, true) + " – " + fmtTime(history.end, true) + (data.skipped ? t("skipped", data.skipped) : "") : t("hist_none"));
+  const alarms = data.alarms.slice().reverse();
+  $("history-alarms-box").hidden = !alarms.length;
+  $("history-alarms").replaceChildren(...alarms.map(a => {
+    const row = document.createElement("div"), left = document.createElement("span"), right = document.createElement("b");
+    row.className = "row"; left.textContent = fmtFull(a.recorded_ms);
+    right.textContent = t("alarm_" + (a.level === 2 ? 2 : a.level === 1 ? 1 : 0));
+    row.append(left, right); return row;
+  }));
+}
+function renderHistory() {
+  const data = history.data, series = data ? data.series : {resp_rate: [], heart_rate: [], amplitude: []};
+  drawHistorySeries("history-resp", series.resp_rate, COLORS.resp, {unit: "unit_tip_bpm"});
+  drawHistorySeries("history-heart", series.heart_rate, COLORS.heart, {unit: "unit_tip_bpm"});
+  drawHistorySeries("history-amp", series.amplitude, COLORS.amp, {zero: true, unit: ""});
+  drawHistoryPresence(data ? data.presence : []);
+  renderHistoryText();
+}
+const failure = (key, ...args) => Object.assign(new Error(key), {key, args});
+async function queryHistory(range) {
+  if (history.busy) return;
+  history.busy = true; history.error = null;
+  try {
+    const start = range.start, end = range.end;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) throw failure("err_range");
+    const query = "start_ns=" + (BigInt(Math.floor(start)) * 1000000n) + "&end_ns=" + (BigInt(Math.floor(end)) * 1000000n);
+    const response = await fetch("/api/history?" + query + "&buckets=240", {cache: "no-store"});
+    if (!response.ok) throw failure("err_http", response.status);
+    const data = await response.json();
+    if (data.schema !== 3) throw failure("err_schema");
+    Object.assign(history, {data, start, end, updated: Date.now()});
+    for (const format of ["csv", "jsonl"]) { const link = $("history-" + format); link.href = "/api/export?" + query + "&format=" + format; link.hidden = false; }
+  } catch (error) {
+    history.error = {key: error.key || "err_generic", args: error.args || []};
+  } finally { history.busy = false; renderHistory(); }
+}
+function presetRange() { const end = serverNow || Date.now(); return {start: end - history.hours * HOUR, end}; }
+function toLocalInput(ms) { const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 19); }
+function choosePreset(hours) {
+  history.hours = hours;
+  document.querySelectorAll("#history-presets button").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.hours) === hours)));
+  $("history-form").hidden = hours !== 0;
+  if (hours) queryHistory(presetRange());
+  else { const range = presetRange(); $("history-end").value = toLocalInput(range.end); $("history-start").value = toLocalInput(range.end - 6 * HOUR); }
+}
+
+/* ---------- sleep ---------- */
+function rows(id, values, names, special) {
+  $(id).replaceChildren(...names.map((name, i) => {
+    const row = document.createElement("div"), left = document.createElement("span"), right = document.createElement("b");
+    row.className = "row"; left.textContent = name;
+    right.textContent = values && values[i] !== undefined ? (special ? special(i, values[i]) : String(values[i])) : "--";
+    row.append(left, right); return row;
+  }));
+}
+function renderSleep(s) {
+  $("sleep").replaceChildren(...SLEEP_FIELDS.map(([key, title, unit]) => {
+    const box = document.createElement("div"), name = document.createElement("span"), val = document.createElement("b"), entry = s.sleep[key];
+    box.className = "stat"; name.textContent = t(title);
+    val.textContent = !entry ? "--" : t("list." + key) ? label(key, entry.values[0]) : entry.values[0] + (unit ? " " + t(unit) : "");
+    box.append(name, val); return box;
+  }));
+  const summary = s.sleep.summary, analysis = s.sleep.analysis;
+  rows("summary", summary && summary.values.slice(1), t("summary_labels"), (i, v) => i === 0 ? (v === 3 ? t("away") : label("stage", v)) : String(v));
+  rows("analysis", analysis && analysis.values, t("analysis_labels"));
+  setText("analysis-note", !analysis ? t("ana_none") : analysis.values.every(v => v === 0) ? t("ana_empty") : "");
+}
+
+/* ---------- state sync ---------- */
+function clearDisplay() {
+  cursor = 0; flow = {frames: null, at: 0, rate: null}; waveData["resp-wave"] = []; waveData["heart-wave"] = [];
+  $("sleep").replaceChildren(); $("summary").replaceChildren(); $("analysis").replaceChildren();
+  $("waveforms").hidden = $("sleep-section").hidden = true;
+  $("alarm").hidden = true;
+  renderOverview({common: {}});
+}
+function renderChrome(s) {
+  for (const [name, mode] of [["realtime", 0], ["sleep", 1]]) {
+    const button = $("mode-" + name);
+    button.disabled = changing || s.switching || (s.active && s.mode === mode);
+    button.setAttribute("aria-pressed", String(s.mode === mode && !s.switching));
+  }
+  if (s.switching) setConn("busy", "switching");
+  else if (!s.active) setConn("bad", "stopped");
+  else if (s.mode === null) setConn("busy", "initializing");
+  else if (flow.rate === null) setConn("ok", "connected");
+  else setConn("ok", "connected_fps", flow.rate);
+  const list = [], monitors = (s.diagnostics && s.diagnostics.monitor_config) || {};
+  if (s.switching) list.push(["n_switching"]);
+  else if (!s.active) list.push(s.error ? ["n_stopped_err", s.error] : ["n_stopped"]);
+  else if (s.error) list.push(["n_error", s.error]);
+  if (Object.values(monitors).some(m => !m.ok)) list.push(["n_monitors"]);
+  setNotes(list);
+  const alarm = s.alarm || {level: 0};
+  $("alarm").hidden = !alarm.level;
+  $("alarm").textContent = alarm.level ? t("banner_" + alarm.level) : "";
+}
+function renderDiagnostics(s) {
+  const d = s.diagnostics || {}, received = d.received_events || {};
+  rows("diagnostics", [d.frames, d.protocol_errors, d.dropped_this_run, received["resp-wave"] || 0, received["heart-wave"] || 0], t("diag_labels"));
+}
+function render(s) {
+  lastSnapshot = s;
+  if (session !== s.session) { clearDisplay(); session = s.session; }
+  serverNow = msOf(s.recorded_ns);
+  const frames = s.diagnostics && s.diagnostics.frames;
+  if (typeof frames === "number") {
+    if (flow.frames === null || frames < flow.frames) flow = {frames, at: serverNow, rate: null};
+    else if (serverNow - flow.at >= 4000) flow = {frames, at: serverNow, rate: (frames - flow.frames) * 1000 / (serverNow - flow.at)};
+  }
+  renderChrome(s);
+  renderOverview(s);
+  renderDiagnostics(s);
+  $("sleep-section").hidden = s.mode !== 1 || s.switching;
+  $("waveforms").hidden = s.mode !== 0 || s.switching;
+  if (s.mode === 1 && !s.switching) renderSleep(s);
+  if (s.mode === 0 && !s.switching) {
+    if (s.wave_gap) { waveData["resp-wave"] = []; waveData["heart-wave"] = []; }
+    for (const batch of s.waves || []) {
+      if (batch.sequence <= cursor || !waveData[batch.name]) continue;
+      const list = waveData[batch.name]; list.push(batch);
+      if (list.length > 60) list.splice(0, list.length - 60);
+    }
+    drawWaves();
+  } else { waveData["resp-wave"] = []; waveData["heart-wave"] = []; }
+  if (history.hours && !history.busy && Date.now() - history.updated >= 30000) queryHistory(presetRange());
+  cursor = s.sequence;
+}
+function setLang(next) {
+  lang = next;
+  try { localStorage.setItem("r60-lang", lang); } catch (e) { /* storage unavailable */ }
+  applyStatic();
+  if (lastSnapshot) render(lastSnapshot); else { showConn(); renderOverview({common: {}}); }
+  showNotes(); drawWaves(); renderHistory();
+}
+async function switchMode(mode) {
+  if (changing) return;
+  changing = true; requestVersion++; clearDisplay();
+  $("mode-realtime").disabled = $("mode-sleep").disabled = true;
+  setConn("busy", "switching");
+  try {
+    const response = await fetch("/api/mode", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({mode})});
+    const result = await response.json();
+    if (!response.ok) throw Error(result.error || "error");
+    changing = false; render(result);
+  } catch (error) {
+    changing = false; setNotes([["n_switch_fail", error.message]]);
+    setConn("bad", "switch_failed");
+    $("mode-realtime").disabled = $("mode-sleep").disabled = false;
+  }
+}
+async function refresh() {
+  const version = requestVersion;
+  try {
+    if (!changing) {
+      const r = await fetch("/api/snapshot?after=" + cursor + "&session=" + (session || ""), {cache: "no-store"});
+      if (!r.ok) throw Error("HTTP " + r.status);
+      const s = await r.json();
+      if (version === requestVersion && !changing) render(s);
+    }
+  } catch (e) {
+    if (version === requestVersion && !changing) { setConn("bad", "conn_lost"); setNotes([["n_down"]]); }
+  } finally { setTimeout(refresh, 2000); }
+}
+
+I18N.zh.connected_fps = n => I18N.zh.connected + " · " + I18N.zh.fps(n);
+I18N.en.connected_fps = n => I18N.en.connected + " · " + I18N.en.fps(n);
+
+$("mode-realtime").addEventListener("click", () => switchMode("realtime"));
+$("mode-sleep").addEventListener("click", () => switchMode("sleep"));
+$("lang-toggle").addEventListener("click", () => setLang(lang === "zh" ? "en" : "zh"));
+document.querySelectorAll("#history-presets button").forEach(b => b.addEventListener("click", () => choosePreset(Number(b.dataset.hours))));
+$("history-form").addEventListener("submit", event => {
+  event.preventDefault();
+  queryHistory({start: Date.parse($("history-start").value), end: Date.parse($("history-end").value)});
+});
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { drawWaves(); renderHistory(); }, 150);
+});
+applyStatic();
+showConn();
+renderOverview({common: {}});
+drawWaves();
+renderHistory();
+choosePreset(12);
+refresh();
+</script>
+</body>
+</html>

@@ -1,0 +1,1153 @@
+diff --git a/kernel/arch/arm64/boot/dts/rockchip/rk3576-quectel-pi-m2-linux.dts b/kernel/arch/arm64/boot/dts/rockchip/rk3576-quectel-pi-m2-linux.dts
+index f265727be..b38950a0b 100644
+--- a/kernel/arch/arm64/boot/dts/rockchip/rk3576-quectel-pi-m2-linux.dts
++++ b/kernel/arch/arm64/boot/dts/rockchip/rk3576-quectel-pi-m2-linux.dts
+@@ -19,5 +19,11 @@
+ 	chosen {
+ 		bootargs_ext = "nvme_core.default_ps_max_latency_us=0 pcie_aspm=off pcie_port_pm=off";
+ 	};
++
+ };
+ 
++&uart1 {
++	radar {
++		compatible = "micradar,r60abd1";
++	};
++};
+diff --git a/kernel/drivers/tty/serdev/Kconfig b/kernel/drivers/tty/serdev/Kconfig
+index 46ae732bf..2c1a4f88c 100644
+--- a/kernel/drivers/tty/serdev/Kconfig
++++ b/kernel/drivers/tty/serdev/Kconfig
+@@ -22,4 +22,11 @@ config SERIAL_DEV_CTRL_TTYPORT
+ 	depends on SERIAL_DEV_BUS != m
+ 	default y
+ 
++config R60ABD1
++	bool "MicRadar R60ABD1 radar driver"
++	depends on OF && SERIAL_DEV_CTRL_TTYPORT
++	help
++	  Receive and decode R60ABD1 UART frames through serdev and expose
++	  typed events at /dev/r60abd1.
++
+ endif
+diff --git a/kernel/drivers/tty/serdev/Makefile b/kernel/drivers/tty/serdev/Makefile
+index 078417e5b..10283814f 100644
+--- a/kernel/drivers/tty/serdev/Makefile
++++ b/kernel/drivers/tty/serdev/Makefile
+@@ -4,3 +4,6 @@ serdev-objs := core.o
+ obj-$(CONFIG_SERIAL_DEV_BUS) += serdev.o
+ 
+ obj-$(CONFIG_SERIAL_DEV_CTRL_TTYPORT) += serdev-ttyport.o
++
++obj-$(CONFIG_R60ABD1) += r60abd1.o
++r60abd1-y := r60abd1_serdev.o
+diff --git a/tools/build-kernel.sh b/tools/build-kernel.sh
+index b0eecf0e9..23408ee25 100755
+--- a/tools/build-kernel.sh
++++ b/tools/build-kernel.sh
+@@ -231,6 +231,17 @@ build_kernel() {
+     else
+         make "$DEFCONFIG" $frags
+     fi
++    local radar_config="$ROOT_DIR/docs/examples/demo-mmwave-human-sensing/src/quectel-r60abd1.config"
++    [ -s "$radar_config" ] || { log_err "缺少雷达配置片段: $radar_config"; return 1; }
++    scripts/kconfig/merge_config.sh -m .config "$radar_config" || return 1
++    make olddefconfig || return 1
++    local option
++    for option in OF SERIAL_DEV_BUS SERIAL_DEV_CTRL_TTYPORT R60ABD1; do
++        grep -qx "CONFIG_${option}=y" .config || {
++            log_err "雷达内核配置未生效: CONFIG_${option}=y"
++            return 1
++        }
++    done
+     make -j"$JOBS" "$DTS_NAME.img"
+ 
+     # 校验产物
+@@ -309,12 +320,74 @@ write_rootfs_file() {
+     rm -f "$verify"
+ }
+ 
++install_mmwave_human_sensing_demo() {
++    local demo="$ROOT_DIR/docs/examples/demo-mmwave-human-sensing/build"
++    local image="$WORK_DIR/rootfs-r60abd1.img"
++    local item info mode rc=0 directory
++
++    command -v debugfs >/dev/null 2>&1 || { log_err "预置雷达demo需要debugfs"; return 1; }
++    command -v e2fsck >/dev/null 2>&1 || { log_err "预置雷达demo需要e2fsck"; return 1; }
++    for item in demo-mmwave-human-sensing ui_server.py r60abd1-ui.html; do
++        [ -s "$demo/$item" ] || { log_err "缺少雷达运行文件: $demo/$item"; return 1; }
++    done
++    [ ! -L "$image" ] || { log_err "拒绝覆盖符号链接: $image"; return 1; }
++    rm -f "$image" || return 1
++    cp --reflink=auto "$IMAGE_DIR/rootfs.img" "$image" || return 1
++
++    for directory in /opt /opt/demo-mmwave-human-sensing; do
++        info="$(debugfs -R "stat $directory" "$image" 2>/dev/null)" || return 1
++        if ! grep -q 'Type: directory' <<<"$info"; then
++            debugfs -w -R "mkdir $directory" "$image" </dev/null >/dev/null
++            info="$(debugfs -R "stat $directory" "$image" 2>/dev/null)" || return 1
++            grep -q 'Type: directory' <<<"$info" || {
++                log_err "无法创建rootfs目录: $directory"
++                return 1
++            }
++        fi
++    done
++    debugfs -w -R 'sif /opt/demo-mmwave-human-sensing mode 040755' "$image" \
++        </dev/null >/dev/null || return 1
++    info="$(debugfs -R 'stat /opt/demo-mmwave-human-sensing' "$image" 2>/dev/null)" || return 1
++    grep -Eq 'Mode:[[:space:]]+0?755([[:space:]]|$)' <<<"$info" || {
++        log_err "雷达目录权限校验失败: /opt/demo-mmwave-human-sensing"
++        return 1
++    }
++    for item in demo-mmwave-human-sensing ui_server.py r60abd1-ui.html; do
++        write_rootfs_file "$image" "$demo/$item" "/opt/demo-mmwave-human-sensing/$item" || return 1
++        mode=644
++        [ "$item" != demo-mmwave-human-sensing ] || mode=755
++        debugfs -w -R "sif /opt/demo-mmwave-human-sensing/$item mode 0100$mode" "$image" \
++            </dev/null >/dev/null || return 1
++        info="$(debugfs -R "stat /opt/demo-mmwave-human-sensing/$item" "$image" 2>/dev/null)" || return 1
++        grep -Eq "Mode:[[:space:]]+0?$mode([[:space:]]|$)" <<<"$info" || {
++            log_err "雷达文件权限校验失败: $item"
++            return 1
++        }
++    done
++    info="$(debugfs -R 'stat /usr/bin/python3' "$image" 2>/dev/null)" || return 1
++    grep -q 'Inode:' <<<"$info" || {
++        log_err "rootfs缺少/usr/bin/python3，不能运行雷达网页服务"
++        return 1
++    }
++    e2fsck -f -y "$image" >/dev/null 2>&1 || rc=$?
++    [ "$rc" -lt 4 ] || { log_err "雷达rootfs工作副本校验失败: $rc"; return 1; }
++    rm -f "$IMAGE_DIR/rootfs.img"
++    mv "$image" "$IMAGE_DIR/rootfs.img" || return 1
++    log_ok "雷达程序和网页已预置到/opt/demo-mmwave-human-sensing（不启用开机自启，底包保持只读）"
++}
++
+ assemble_image_dir() {
+     # 在删除旧产物之前先校验选中的启动固件。
+     local uboot_image
+     uboot_image="$(resolve_uboot_image)" || return 1
+     check_uboot_compatibility "$uboot_image" \
+         "$KERNEL_DIR/arch/arm64/boot/dts/rockchip/$DTS_NAME.dtb" || return 1
++    grep -qx 'CONFIG_R60ABD1=y' "$KERNEL_DIR/include/config/auto.conf" || {
++        log_err "请先编译启用CONFIG_R60ABD1=y的内核"
++        return 1
++    }
++    # 先实际编译和链接应用，失败时不组装或改写rootfs工作镜像。
++    make -B -C "$ROOT_DIR/docs/examples/demo-mmwave-human-sensing" userspace || return 1
+     log_info "[3/5] 组装 Image 目录 (替换 boot 分区)"
+ 
+     rm -rf "$IMAGE_DIR" "$RESULT_DIR"
+@@ -409,6 +482,7 @@ assemble_image_dir() {
+     else
+         log_info "跳过 overlays 写入 (无 .dtbo 产物)"
+     fi
++    install_mmwave_human_sensing_demo
+ }
+ 
+ # ----------------------------------------------------------------------------
+diff --git a/kernel/drivers/tty/serdev/r60abd1_serdev.c b/kernel/drivers/tty/serdev/r60abd1_serdev.c
+new file mode 100644
+--- /dev/null
++++ b/kernel/drivers/tty/serdev/r60abd1_serdev.c
+@@ -0,0 +1,868 @@
++// SPDX-License-Identifier: GPL-2.0-only
++#include <linux/build_bug.h>
++#include <linux/compat.h>
++#include <linux/completion.h>
++#include <linux/errno.h>
++#include <linux/fs.h>
++#include <linux/jiffies.h>
++#include <linux/kernel.h>
++#include <linux/kref.h>
++#include <linux/ktime.h>
++#include <linux/limits.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/poll.h>
++#include <linux/serdev.h>
++#include <linux/slab.h>
++#include <linux/spinlock.h>
++#include <linux/uaccess.h>
++
++#include <linux/r60abd1.h>
++
++#define QUEUE_SIZE 128
++#define FRAME_SIZE (R60ABD1_MAX_PAYLOAD + 9)
++
++struct radar_reply {
++	u8 value;
++	u32 mode;
++	u64 received_ns;
++};
++
++struct radar {
++	struct serdev_device *serial;
++	struct miscdevice misc;
++	struct kref ref;
++	struct mutex rx_lock, queue_lock, command_lock;
++	spinlock_t reply_lock;
++	struct completion reply_done, tx_done;
++	wait_queue_head_t wait;
++	struct r60abd1_event *queue;
++	struct r60abd1_event event;
++	u8 buffer[FRAME_SIZE];
++	unsigned int used, head, queued;
++	u64 bytes, frames, errors, dropped;
++	u32 mode, ready;
++	bool opened, dead, overflow, pending;
++	u8 expected_control, expected;
++	struct radar_reply reply;
++	int result;
++};
++
++struct reader {
++	struct radar *radar;
++	struct mutex lock;
++	bool staged;
++	struct r60abd1_event event;
++};
++
++enum format {
++	F_BYTE, F_WORD, F_WAVE, F_BYTES, F_ANALYSIS,
++	F_FIXED, F_READY, F_BOOL, F_TEXT
++};
++struct message {
++	u8 control, command, type, format;
++	short length;
++};
++
++#define MSG(c, m, t, f, n) { c, m, R60ABD1_##t, F_##f, n }
++static const struct message messages[] = {
++	MSG(0x01, 1, HEARTBEAT, FIXED, 1),
++	MSG(0x01, 2, RESET, FIXED, 1),
++	MSG(0x02, 1, MODEL, TEXT, -1),
++	MSG(0x02, 2, PRODUCT_ID, TEXT, -1),
++	MSG(0x02, 3, HARDWARE, TEXT, -1),
++	MSG(0x02, 4, FIRMWARE, TEXT, -1),
++	MSG(0x05, 1, READY, READY, 1),
++	MSG(0x05, 0x81, READY, BOOL, 1),
++	MSG(0x07, 7, RANGE, BYTE, 1),
++	MSG(0x80, 1, PRESENCE, BYTE, 1),
++	MSG(0x80, 2, MOTION, BYTE, 1),
++	MSG(0x80, 3, AMPLITUDE, BYTE, 1),
++	MSG(0x80, 4, DISTANCE, WORD, 2),
++	MSG(0x80, 5, POSITION, TEXT, 6),
++	MSG(0x81, 1, RESP_STATUS, BYTE, 1),
++	MSG(0x81, 2, RESP_RATE, BYTE, 1),
++	MSG(0x81, 5, RESP_WAVE, WAVE, 5),
++	MSG(0x85, 2, HEART_RATE, BYTE, 1),
++	MSG(0x85, 5, HEART_WAVE, WAVE, 5),
++	MSG(0x84, 1, BED, BYTE, 1),
++	MSG(0x84, 2, STAGE, BYTE, 1),
++	MSG(0x84, 3, AWAKE_TIME, WORD, 2),
++	MSG(0x84, 4, LIGHT_TIME, WORD, 2),
++	MSG(0x84, 5, DEEP_TIME, WORD, 2),
++	MSG(0x84, 6, SCORE, BYTE, 1),
++	MSG(0x84, 0x0c, SUMMARY, BYTES, 8),
++	MSG(0x84, 0x0d, ANALYSIS, ANALYSIS, 12),
++	MSG(0x84, 0x0e, SLEEP_ERROR, BYTE, 1),
++	MSG(0x84, 0x0f, MODE, BOOL, 1),
++	MSG(0x84, 0x10, QUALITY, BYTE, 1),
++	MSG(0x84, 0x11, STRUGGLE, BYTE, 1),
++	MSG(0x84, 0x12, ABSENCE, BYTE, 1),
++};
++
++static u16 be16(const u8 *p)
++{
++	return ((u16)p[0] << 8) | p[1];
++}
++
++static u8 sum8(const u8 *p, unsigned int length)
++{
++	u8 sum = 0;
++
++	while (length--)
++		sum += *p++;
++	return sum;
++}
++
++static u8 report_command(u8 control, u8 command)
++{
++	if (control == 0x80 || control == 0x81 || control == 0x85)
++		return command & 0x7f;
++	if (control == 0x02 && command >= 0xa1 && command <= 0xa4)
++		return command & 0x0f;
++	if (control == 0x01 && command == 0x80)
++		return 1;
++	if (control == 0x07 && command == 0x87)
++		return 7;
++	if (control == 0x84) {
++		if (command >= 0x81 && command <= 0x86)
++			return command & 0x7f;
++		switch (command) {
++		case 0x8c: return 0x0f;
++		case 0x8d: return 0x0c;
++		case 0x8e: return 0x0e;
++		case 0x8f: return 0x0d;
++		}
++	}
++	return command;
++}
++
++/* 此函数只解释协议字段，不做串口操作，也不访问用户内存。 */
++static int decode(struct r60abd1_event *event, const u8 *frame, unsigned int length)
++{
++	const u8 *data = frame + 6;
++	const struct message *m = NULL;
++	u8 command = report_command(frame[2], frame[3]);
++	unsigned int i;
++
++	memset(event, 0, sizeof(*event));
++	event->control = frame[2];
++	event->command = frame[3];
++	event->length = length;
++	memcpy(event->raw, data, length);
++	for (i = 0; i < ARRAY_SIZE(messages); i++)
++		if (messages[i].control == frame[2] && messages[i].command == command) {
++			m = &messages[i];
++			break;
++		}
++	if (!m) {
++		event->type = R60ABD1_RAW;
++		return 0;
++	}
++	if (m->length >= 0 && length != (unsigned int)m->length)
++		return -EBADMSG;
++	event->type = m->type;
++	switch (m->format) {
++	case F_FIXED:
++	case F_READY:
++		if (data[0] != 0x0f)
++			return -EBADMSG;
++		if (m->format == F_READY) {
++			event->count = 1;
++			event->value[0] = 1;
++		}
++		break;
++	case F_BOOL:
++		if (data[0] > 1)
++			return -EBADMSG;
++		fallthrough;
++	case F_BYTE:
++		event->count = 1;
++		event->value[0] = data[0];
++		break;
++	case F_WORD:
++		event->count = 1;
++		event->value[0] = be16(data);
++		break;
++	case F_WAVE:
++		event->count = 5;
++		for (i = 0; i < 5; i++)
++			event->value[i] = (int)data[i] - 128;
++		break;
++	case F_BYTES:
++		event->count = length;
++		for (i = 0; i < length; i++)
++			event->value[i] = data[i];
++		break;
++	case F_ANALYSIS:
++		event->count = 11;
++		event->value[0] = data[0];
++		event->value[1] = be16(data + 1);
++		for (i = 3; i < 12; i++)
++			event->value[i - 1] = data[i];
++		break;
++	case F_TEXT:
++		break;
++	}
++	return 0;
++}
++
++static void free_radar(struct kref *ref)
++{
++	struct radar *r = container_of(ref, struct radar, ref);
++
++	kvfree(r->queue);
++	kfree(r);
++}
++
++/* 满队列保留最新事件，并让read明确报告EOVERFLOW。 */
++static void enqueue(struct radar *r)
++{
++	unsigned int index;
++
++	r->event.version = R60ABD1_VERSION;
++	r->event.mode = READ_ONCE(r->mode);
++	r->event.received_ns = ktime_get_real_ns();
++	mutex_lock(&r->queue_lock);
++	if (r->queued == QUEUE_SIZE) {
++		r->head = (r->head + 1) % QUEUE_SIZE;
++		r->queued--;
++		r->dropped++;
++		r->overflow = true;
++	}
++	index = (r->head + r->queued++) % QUEUE_SIZE;
++	r->queue[index] = r->event;
++	mutex_unlock(&r->queue_lock);
++	wake_up_interruptible(&r->wait);
++}
++
++static bool finish_command(struct radar *r, u8 control, u8 command,
++			   int error, u8 value, bool any)
++{
++	unsigned long flags;
++	bool matched = false;
++
++	spin_lock_irqsave(&r->reply_lock, flags);
++	if (r->pending && (any || (control == r->expected_control && command == r->expected))) {
++		r->pending = false;
++		r->result = error;
++		r->reply.value = value;
++		r->reply.mode = READ_ONCE(r->mode);
++		r->reply.received_ns = ktime_get_real_ns();
++		matched = true;
++		complete(&r->reply_done);
++	}
++	spin_unlock_irqrestore(&r->reply_lock, flags);
++	return matched;
++}
++
++static void bad_frame(struct radar *r, int error, u8 control, u8 command)
++{
++	r->errors++;
++	finish_command(r, control, command, -error, 0, false);
++	memset(&r->event, 0, sizeof(r->event));
++	r->event.type = R60ABD1_PROTOCOL_ERROR;
++	r->event.control = control;
++	r->event.command = command;
++	r->event.error = error;
++	enqueue(r);
++}
++
++static void handle_frame(struct radar *r, unsigned int length)
++{
++	u8 control = r->buffer[2], command = r->buffer[3];
++	int ret;
++
++	if ((control == 0x80 || control == 0x81 || control == 0x84 || control == 0x85) &&
++	    (command == 0x00 || command == 0x80)) {
++		if (length != 1 || r->buffer[6] > 1) {
++			bad_frame(r, EBADMSG, control, command);
++			return;
++		}
++		if (finish_command(r, control, command, 0, r->buffer[6], false))
++			return;
++	}
++	ret = decode(&r->event, r->buffer, length);
++	if (ret) {
++		bad_frame(r, -ret, r->buffer[2], r->buffer[3]);
++		return;
++	}
++	if (r->event.type == R60ABD1_MODE) {
++		WRITE_ONCE(r->mode, r->event.value[0]);
++		if (finish_command(r, r->event.control, r->event.command,
++				   0, r->event.value[0], false))
++			return;
++	} else if (r->event.type == R60ABD1_PRESENCE ||
++		   r->event.type == R60ABD1_RESP_STATUS) {
++		if (finish_command(r, r->event.control, r->event.command,
++				   0, r->event.value[0], false))
++			return;
++	} else if (r->event.type == R60ABD1_READY) {
++		WRITE_ONCE(r->ready, r->event.value[0]);
++	} else if (r->event.type == R60ABD1_RESET) {
++		WRITE_ONCE(r->mode, R60ABD1_UNKNOWN);
++		WRITE_ONCE(r->ready, 0);
++		finish_command(r, 0, 0, -ECONNRESET, 0, true);
++	}
++	enqueue(r);
++}
++
++static void discard(struct radar *r, unsigned int count)
++{
++	memmove(r->buffer, r->buffer + count, r->used - count);
++	r->used -= count;
++}
++
++static void parse(struct radar *r)
++{
++	unsigned int length, total;
++
++	while (r->used >= 2) {
++		if (r->buffer[0] != 0x53 || r->buffer[1] != 0x59) {
++			discard(r, 1);
++			continue;
++		}
++		if (r->used < 6)
++			return;
++		length = be16(r->buffer + 4);
++		if (length > R60ABD1_MAX_PAYLOAD) {
++			bad_frame(r, EMSGSIZE, r->buffer[2], r->buffer[3]);
++			discard(r, 1);
++			continue;
++		}
++		total = length + 9;
++		if (r->used < total)
++			return;
++		if (r->buffer[total - 2] != 0x54 || r->buffer[total - 1] != 0x43 ||
++		    sum8(r->buffer, total - 3) != r->buffer[total - 3]) {
++			bad_frame(r, EBADMSG, r->buffer[2], r->buffer[3]);
++			discard(r, 1);
++			continue;
++		}
++		r->frames++;
++		handle_frame(r, length);
++		discard(r, total);
++	}
++}
++
++static int receive_buf(struct serdev_device *serial, const u8 *bytes, size_t count)
++{
++	struct radar *r = serdev_device_get_drvdata(serial);
++	unsigned int i, accepted = min_t(size_t, count, INT_MAX);
++
++	if (!r)
++		return 0;
++	mutex_lock(&r->rx_lock);
++	r->bytes += accepted;
++	for (i = 0; i < accepted; i++) {
++		if (r->used == FRAME_SIZE) {
++			bad_frame(r, EMSGSIZE, 0, 0);
++			discard(r, 1);
++		}
++		r->buffer[r->used++] = bytes[i];
++		parse(r);
++	}
++	mutex_unlock(&r->rx_lock);
++	return accepted;
++}
++
++static void write_wakeup(struct serdev_device *serial)
++{
++	struct radar *r = serdev_device_get_drvdata(serial);
++
++	if (r)
++		complete(&r->tx_done);
++}
++
++static const struct serdev_device_ops serial_ops = {
++	.receive_buf = receive_buf,
++	.write_wakeup = write_wakeup,
++};
++
++static long remaining(unsigned long deadline)
++{
++	return time_after_eq(jiffies, deadline) ? 0 : deadline - jiffies;
++}
++
++/* 发送和等待回复共用一个截止时间；解绑会唤醒两处等待。 */
++static int exchange(struct radar *r, u8 control, u8 command, u8 value,
++		    struct radar_reply *reply,
++		    unsigned long deadline)
++{
++	u8 bytes[10] = {0x53, 0x59, control, command, 0, 1, value, 0, 0x54, 0x43};
++	unsigned int offset = 0;
++	unsigned long flags;
++	long left, waited;
++	int ret;
++
++	bytes[7] = sum8(bytes, 7);
++	spin_lock_irqsave(&r->reply_lock, flags);
++	if (READ_ONCE(r->dead)) {
++		spin_unlock_irqrestore(&r->reply_lock, flags);
++		return -ENODEV;
++	}
++	if (reply) {
++		reinit_completion(&r->reply_done);
++		r->expected_control = control;
++		r->expected = command;
++		r->result = -EINPROGRESS;
++		r->pending = true;
++	}
++	spin_unlock_irqrestore(&r->reply_lock, flags);
++	while (offset < sizeof(bytes)) {
++		ret = -ENODEV;
++		if (READ_ONCE(r->dead))
++			goto out;
++		ret = -ETIMEDOUT;
++		left = remaining(deadline);
++		if (!left)
++			goto out;
++		reinit_completion(&r->tx_done);
++		ret = serdev_device_write_buf(r->serial, bytes + offset, sizeof(bytes) - offset);
++		if (ret < 0)
++			goto out;
++		if ((unsigned int)ret > sizeof(bytes) - offset) {
++			ret = -EIO;
++			goto out;
++		}
++		offset += ret;
++		if (offset == sizeof(bytes))
++			break;
++		left = remaining(deadline);
++		ret = -ETIMEDOUT;
++		if (!left)
++			goto out;
++		waited = wait_for_completion_interruptible_timeout(&r->tx_done, left);
++		if (waited <= 0) {
++			ret = waited ? waited : -ETIMEDOUT;
++			goto out;
++		}
++	}
++	/* reply为NULL时只发送；应答作为普通事件进入读队列。 */
++	if (!reply) {
++		ret = 0;
++		goto out;
++	}
++	left = remaining(deadline);
++	ret = -ETIMEDOUT;
++	if (!left)
++		goto out;
++	waited = wait_for_completion_interruptible_timeout(&r->reply_done, left);
++	if (waited <= 0) {
++		ret = waited ? waited : -ETIMEDOUT;
++		goto out;
++	}
++	spin_lock_irqsave(&r->reply_lock, flags);
++	ret = r->result;
++	*reply = r->reply;
++	spin_unlock_irqrestore(&r->reply_lock, flags);
++out:
++	spin_lock_irqsave(&r->reply_lock, flags);
++	r->pending = false;
++	spin_unlock_irqrestore(&r->reply_lock, flags);
++	return ret;
++}
++
++static int mode_command(struct radar *r, struct r60abd1_mode_arg *arg, bool set)
++{
++	unsigned long deadline = jiffies + msecs_to_jiffies(arg->timeout_ms);
++	struct radar_reply reply;
++	int ret;
++
++	if (!mutex_trylock(&r->command_lock))
++		return -EBUSY;
++	ret = exchange(r, 0x84, 0x8c, 0x0f, &reply, deadline);
++	if (ret)
++		goto out;
++	if (!set) {
++		arg->mode = reply.value;
++		goto out;
++	}
++	if (reply.value == arg->mode)
++		goto out;
++	WRITE_ONCE(r->mode, R60ABD1_UNKNOWN);
++	ret = exchange(r, 0x84, 0x0f, arg->mode, &reply, deadline);
++	if (ret)
++		goto out;
++	if (reply.value != arg->mode) {
++		ret = -EPROTO;
++		goto out;
++	}
++	ret = exchange(r, 0x84, 0x8c, 0x0f, &reply, deadline);
++	if (!ret && reply.value != arg->mode)
++		ret = -EPROTO;
++out:
++	if (ret)
++		WRITE_ONCE(r->mode, R60ABD1_UNKNOWN);
++	mutex_unlock(&r->command_lock);
++	return ret;
++}
++
++static int state_command(struct radar *r, struct r60abd1_state_arg *arg)
++{
++	unsigned long deadline = jiffies + msecs_to_jiffies(arg->timeout_ms);
++	struct radar_reply reply;
++	u8 control = arg->type == R60ABD1_PRESENCE ? 0x80 : 0x81;
++	int ret;
++
++	if (!mutex_trylock(&r->command_lock))
++		return -EBUSY;
++	ret = exchange(r, control, 0x81, 0x0f, &reply, deadline);
++	if (!ret) {
++		if ((arg->type == R60ABD1_PRESENCE && reply.value > 1) ||
++		    (arg->type == R60ABD1_RESP_STATUS && (reply.value < 1 || reply.value > 4))) {
++			ret = -EPROTO;
++		} else {
++			arg->value = reply.value;
++			arg->mode = reply.mode;
++			arg->received_ns = reply.received_ns;
++		}
++	}
++	mutex_unlock(&r->command_lock);
++	return ret;
++}
++
++static int enable_monitor(struct radar *r, const struct r60abd1_monitor_arg *arg)
++{
++	unsigned long deadline = jiffies + msecs_to_jiffies(arg->timeout_ms);
++	struct radar_reply reply;
++	int ret;
++
++	if (!mutex_trylock(&r->command_lock))
++		return -EBUSY;
++	ret = exchange(r, arg->control, 0x00, 0x01, &reply, deadline);
++	if (!ret && reply.value != 1)
++		ret = -EPROTO;
++	if (!ret) {
++		ret = exchange(r, arg->control, 0x80, 0x0f, &reply, deadline);
++		if (!ret && reply.value != 1)
++			ret = -EPROTO;
++	}
++	mutex_unlock(&r->command_lock);
++	return ret;
++}
++
++/* 只允许查询类命令：运动、范围、呼吸波形、心率波形；应答走普通事件队列。 */
++static bool query_allowed(u32 control, u32 command)
++{
++	return (control == 0x80 && command == 0x82) ||
++	       (control == 0x07 && command == 0x87) ||
++	       (control == 0x81 && command == 0x85) ||
++	       (control == 0x85 && command == 0x85);
++}
++
++static int query_command(struct radar *r, const struct r60abd1_query_arg *arg)
++{
++	unsigned long deadline = jiffies + msecs_to_jiffies(200);
++	int ret;
++
++	if (!mutex_trylock(&r->command_lock))
++		return -EBUSY;
++	ret = exchange(r, arg->control, arg->command, 0x0f, NULL, deadline);
++	mutex_unlock(&r->command_lock);
++	return ret;
++}
++
++static int radar_open(struct inode *inode, struct file *file)
++{
++	struct radar *r = container_of(file->private_data, struct radar, misc);
++	struct reader *reader;
++	int ret = 0;
++
++	reader = kzalloc(sizeof(*reader), GFP_KERNEL);
++	if (!reader)
++		return -ENOMEM;
++	reader->radar = r;
++	mutex_init(&reader->lock);
++	mutex_lock(&r->queue_lock);
++	if (r->dead)
++		ret = -ENODEV;
++	else if (r->opened)
++		ret = -EBUSY;
++	else {
++		r->opened = true;
++		kref_get(&r->ref);
++		file->private_data = reader;
++	}
++	mutex_unlock(&r->queue_lock);
++	if (ret) {
++		kfree(reader);
++		return ret;
++	}
++	return nonseekable_open(inode, file);
++}
++
++static int radar_release(struct inode *inode, struct file *file)
++{
++	struct reader *reader = file->private_data;
++	struct radar *r = reader->radar;
++
++	mutex_lock(&r->queue_lock);
++	if (reader->staged) {
++		r->dropped++;
++		r->overflow = true;
++	}
++	r->opened = false;
++	mutex_unlock(&r->queue_lock);
++	kfree(reader);
++	kref_put(&r->ref, free_radar);
++	return 0;
++}
++
++static ssize_t radar_read(struct file *file, char __user *buffer, size_t count,
++			  loff_t *offset)
++{
++	struct reader *reader = file->private_data;
++	struct radar *r = reader->radar;
++	ssize_t ret;
++
++	if (!count)
++		return 0;
++	if (count < sizeof(reader->event))
++		return -EMSGSIZE;
++	ret = mutex_lock_interruptible(&reader->lock);
++	if (ret)
++		return ret;
++	for (;;) {
++		if (reader->staged) {
++			if (copy_to_user(buffer, &reader->event, sizeof(reader->event))) {
++				ret = -EFAULT;
++			} else {
++				WRITE_ONCE(reader->staged, false);
++				ret = sizeof(reader->event);
++			}
++			break;
++		}
++		ret = mutex_lock_interruptible(&r->queue_lock);
++		if (ret)
++			break;
++		if (r->overflow) {
++			r->overflow = false;
++			ret = -EOVERFLOW;
++		} else if (r->queued) {
++			reader->event = r->queue[r->head];
++			WRITE_ONCE(reader->staged, true);
++			r->head = (r->head + 1) % QUEUE_SIZE;
++			r->queued--;
++			ret = 0;
++		} else {
++			ret = r->dead ? -ENODEV : -EAGAIN;
++		}
++		mutex_unlock(&r->queue_lock);
++		if (!ret)
++			continue;
++		if (ret != -EAGAIN || (file->f_flags & O_NONBLOCK))
++			break;
++		ret = wait_event_interruptible(r->wait, READ_ONCE(r->queued) ||
++					      READ_ONCE(r->overflow) || READ_ONCE(r->dead));
++		if (ret)
++			break;
++	}
++	mutex_unlock(&reader->lock);
++	return ret;
++}
++
++static __poll_t radar_poll(struct file *file, poll_table *wait)
++{
++	struct reader *reader = file->private_data;
++	struct radar *r = reader->radar;
++	__poll_t mask = 0;
++
++	poll_wait(file, &r->wait, wait);
++	mutex_lock(&r->queue_lock);
++	if (r->queued || READ_ONCE(reader->staged))
++		mask |= EPOLLIN | EPOLLRDNORM;
++	if (r->overflow)
++		mask |= EPOLLERR;
++	if (r->dead)
++		mask |= EPOLLHUP;
++	mutex_unlock(&r->queue_lock);
++	return mask;
++}
++
++static long radar_ioctl(struct file *file, unsigned int command, unsigned long argument)
++{
++	struct radar *r = ((struct reader *)file->private_data)->radar;
++	struct r60abd1_status status = {};
++	struct r60abd1_mode_arg arg;
++	struct r60abd1_state_arg state_arg;
++	struct r60abd1_monitor_arg monitor_arg;
++	struct r60abd1_query_arg query_arg;
++	void __user *user = (void __user *)argument;
++	int ret;
++
++	if (command == R60ABD1_GET_STATUS) {
++		mutex_lock(&r->rx_lock);
++		mutex_lock(&r->queue_lock);
++		status.version = R60ABD1_VERSION;
++		status.event_size = sizeof(struct r60abd1_event);
++		status.mode = READ_ONCE(r->mode);
++		status.ready = READ_ONCE(r->ready);
++		status.queued = r->queued;
++		status.capacity = QUEUE_SIZE;
++		status.connected = !r->dead;
++		status.bytes = r->bytes;
++		status.frames = r->frames;
++		status.errors = r->errors;
++		status.dropped = r->dropped;
++		mutex_unlock(&r->queue_lock);
++		mutex_unlock(&r->rx_lock);
++		return copy_to_user(user, &status, sizeof(status)) ? -EFAULT : 0;
++	}
++	if (command == R60ABD1_GET_STATE) {
++		if (copy_from_user(&state_arg, user, sizeof(state_arg)))
++			return -EFAULT;
++		if (!state_arg.timeout_ms || state_arg.timeout_ms > 60000 ||
++		    (state_arg.type != R60ABD1_PRESENCE && state_arg.type != R60ABD1_RESP_STATUS))
++			return -EINVAL;
++		ret = state_command(r, &state_arg);
++		if (ret)
++			return ret;
++		return copy_to_user(user, &state_arg, sizeof(state_arg)) ? -EFAULT : 0;
++	}
++	if (command == R60ABD1_ENABLE_MONITOR) {
++		if (!(file->f_mode & FMODE_WRITE))
++			return -EBADF;
++		if (copy_from_user(&monitor_arg, user, sizeof(monitor_arg)))
++			return -EFAULT;
++		if (!monitor_arg.timeout_ms || monitor_arg.timeout_ms > 60000 ||
++		    (monitor_arg.control != 0x80 && monitor_arg.control != 0x81 &&
++		     monitor_arg.control != 0x84 && monitor_arg.control != 0x85))
++			return -EINVAL;
++		return enable_monitor(r, &monitor_arg);
++	}
++	if (command == R60ABD1_QUERY) {
++		if (!(file->f_mode & FMODE_WRITE))
++			return -EBADF;
++		if (copy_from_user(&query_arg, user, sizeof(query_arg)))
++			return -EFAULT;
++		if (!query_allowed(query_arg.control, query_arg.command))
++			return -EINVAL;
++		return query_command(r, &query_arg);
++	}
++	if (command != R60ABD1_GET_MODE && command != R60ABD1_SET_MODE)
++		return -ENOTTY;
++	if (command == R60ABD1_SET_MODE && !(file->f_mode & FMODE_WRITE))
++		return -EBADF;
++	if (copy_from_user(&arg, user, sizeof(arg)))
++		return -EFAULT;
++	if (!arg.timeout_ms || arg.timeout_ms > 60000 ||
++	    (command == R60ABD1_SET_MODE && arg.mode > 1))
++		return -EINVAL;
++	ret = mode_command(r, &arg, command == R60ABD1_SET_MODE);
++	if (ret || command == R60ABD1_SET_MODE)
++		return ret;
++	return copy_to_user(user, &arg, sizeof(arg)) ? -EFAULT : 0;
++}
++
++static const struct file_operations radar_fops = {
++	.owner = THIS_MODULE,
++	.open = radar_open,
++	.release = radar_release,
++	.read = radar_read,
++	.poll = radar_poll,
++	.unlocked_ioctl = radar_ioctl,
++	.compat_ioctl = compat_ptr_ioctl,
++	.llseek = no_llseek,
++};
++
++static int radar_probe(struct serdev_device *serial)
++{
++	struct radar *r;
++	unsigned int baud;
++	int ret;
++
++	BUILD_BUG_ON(sizeof(struct r60abd1_event) != 4176);
++	BUILD_BUG_ON(sizeof(struct r60abd1_status) != 64);
++	BUILD_BUG_ON(sizeof(struct r60abd1_state_arg) != 24);
++	BUILD_BUG_ON(sizeof(struct r60abd1_monitor_arg) != 8);
++	BUILD_BUG_ON(sizeof(struct r60abd1_query_arg) != 8);
++	r = kzalloc(sizeof(*r), GFP_KERNEL);
++	if (!r)
++		return -ENOMEM;
++	r->queue = kvcalloc(QUEUE_SIZE, sizeof(*r->queue), GFP_KERNEL);
++	if (!r->queue) {
++		kfree(r);
++		return -ENOMEM;
++	}
++	kref_init(&r->ref);
++	mutex_init(&r->rx_lock);
++	mutex_init(&r->queue_lock);
++	mutex_init(&r->command_lock);
++	spin_lock_init(&r->reply_lock);
++	init_completion(&r->reply_done);
++	init_completion(&r->tx_done);
++	init_waitqueue_head(&r->wait);
++	r->serial = serial;
++	r->mode = r->ready = R60ABD1_UNKNOWN;
++	serdev_device_set_drvdata(serial, r);
++	serdev_device_set_client_ops(serial, &serial_ops);
++	ret = serdev_device_open(serial);
++	if (ret)
++		goto free;
++	serdev_device_set_flow_control(serial, false);
++	ret = serdev_device_set_parity(serial, SERDEV_PARITY_NONE);
++	if (ret)
++		goto close;
++	baud = serdev_device_set_baudrate(serial, 115200);
++	if (baud != 115200) {
++		dev_err(&serial->dev, "requested 115200 baud, got %u\n", baud);
++		ret = -EINVAL;
++		goto close;
++	}
++	r->misc.minor = MISC_DYNAMIC_MINOR;
++	r->misc.name = "r60abd1";
++	r->misc.fops = &radar_fops;
++	r->misc.parent = &serial->dev;
++	r->misc.mode = 0600;
++	ret = misc_register(&r->misc);
++	if (ret)
++		goto close;
++	dev_info(&serial->dev, "%s registered at 115200 baud (state-query v1, monitor-enable v1, query v1)\n",
++		 R60ABD1_DEVICE);
++	return 0;
++close:
++	serdev_device_close(serial);
++free:
++	serdev_device_set_drvdata(serial, NULL);
++	kref_put(&r->ref, free_radar);
++	return dev_err_probe(&serial->dev, ret, "radar initialization failed\n");
++}
++
++static void radar_remove(struct serdev_device *serial)
++{
++	struct radar *r = serdev_device_get_drvdata(serial);
++
++	mutex_lock(&r->queue_lock);
++	WRITE_ONCE(r->dead, true);
++	mutex_unlock(&r->queue_lock);
++	misc_deregister(&r->misc);
++	finish_command(r, 0, 0, -ENODEV, 0, true);
++	complete(&r->tx_done);
++	wake_up_interruptible(&r->wait);
++	mutex_lock(&r->command_lock);
++	serdev_device_close(serial);
++	serdev_device_set_drvdata(serial, NULL);
++	mutex_unlock(&r->command_lock);
++	kref_put(&r->ref, free_radar);
++}
++
++static const struct of_device_id radar_match[] = {
++	{ .compatible = "micradar,r60abd1" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, radar_match);
++
++static struct serdev_device_driver radar_driver = {
++	.probe = radar_probe,
++	.remove = radar_remove,
++	.driver = {
++		.name = "r60abd1",
++		.of_match_table = radar_match,
++	},
++};
++module_serdev_device_driver(radar_driver);
++MODULE_DESCRIPTION("R60ABD1 radar protocol driver");
++MODULE_LICENSE("GPL");
+diff --git a/kernel/include/linux/r60abd1.h b/kernel/include/linux/r60abd1.h
+new file mode 100644
+--- /dev/null
++++ b/kernel/include/linux/r60abd1.h
+@@ -0,0 +1,7 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#ifndef _LINUX_R60ABD1_H
++#define _LINUX_R60ABD1_H
++
++#include <uapi/linux/r60abd1.h>
++
++#endif
+diff --git a/kernel/include/uapi/linux/r60abd1.h b/kernel/include/uapi/linux/r60abd1.h
+new file mode 100644
+--- /dev/null
++++ b/kernel/include/uapi/linux/r60abd1.h
+@@ -0,0 +1,115 @@
++/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
++#ifndef _UAPI_LINUX_R60ABD1_H
++#define _UAPI_LINUX_R60ABD1_H
++
++#include <linux/ioctl.h>
++#include <linux/types.h>
++
++#define R60ABD1_VERSION 1
++#define R60ABD1_MAX_PAYLOAD 4087
++#define R60ABD1_MAX_VALUES 12
++#define R60ABD1_DEVICE "/dev/r60abd1"
++
++enum r60abd1_mode {
++	R60ABD1_REALTIME = 0,
++	R60ABD1_SLEEP = 1,
++	R60ABD1_UNKNOWN = 255,
++};
++
++enum r60abd1_type {
++	R60ABD1_HEARTBEAT = 1,
++	R60ABD1_RESET,
++	R60ABD1_READY,
++	R60ABD1_MODEL,
++	R60ABD1_PRODUCT_ID,
++	R60ABD1_HARDWARE,
++	R60ABD1_FIRMWARE,
++	R60ABD1_RANGE,
++	R60ABD1_PRESENCE,
++	R60ABD1_MOTION,
++	R60ABD1_AMPLITUDE,
++	R60ABD1_DISTANCE,
++	R60ABD1_POSITION,
++	R60ABD1_RESP_STATUS,
++	R60ABD1_RESP_RATE,
++	R60ABD1_RESP_WAVE,
++	R60ABD1_HEART_RATE,
++	R60ABD1_HEART_WAVE,
++	R60ABD1_BED,
++	R60ABD1_STAGE,
++	R60ABD1_AWAKE_TIME,
++	R60ABD1_LIGHT_TIME,
++	R60ABD1_DEEP_TIME,
++	R60ABD1_SCORE,
++	R60ABD1_SUMMARY,
++	R60ABD1_ANALYSIS,
++	R60ABD1_SLEEP_ERROR,
++	R60ABD1_QUALITY,
++	R60ABD1_STRUGGLE,
++	R60ABD1_ABSENCE,
++	R60ABD1_RAW,
++	R60ABD1_MODE,
++	R60ABD1_PROTOCOL_ERROR,
++};
++
++struct r60abd1_event {
++	__u32 version;
++	__u32 type;
++	__u32 mode;
++	__u32 count;
++	__aligned_u64 received_ns;
++	__u32 length;
++	__u32 error;
++	__s32 value[R60ABD1_MAX_VALUES];
++	__u8 control;
++	__u8 command;
++	__u8 reserved[6];
++	__u8 raw[R60ABD1_MAX_PAYLOAD + 1];
++};
++
++struct r60abd1_status {
++	__u32 version;
++	__u32 event_size;
++	__u32 mode;
++	__u32 ready;
++	__u32 queued;
++	__u32 capacity;
++	__u32 connected;
++	__u32 reserved;
++	__aligned_u64 bytes;
++	__aligned_u64 frames;
++	__aligned_u64 errors;
++	__aligned_u64 dropped;
++};
++
++struct r60abd1_mode_arg {
++	__u32 mode;
++	__u32 timeout_ms;
++};
++
++struct r60abd1_state_arg {
++	__u32 type;
++	__u32 timeout_ms;
++	__s32 value;
++	__u32 mode;
++	__aligned_u64 received_ns;
++};
++
++struct r60abd1_monitor_arg {
++	__u32 control;
++	__u32 timeout_ms;
++};
++
++struct r60abd1_query_arg {
++	__u32 control;
++	__u32 command;
++};
++
++#define R60ABD1_GET_MODE _IOWR('R', 1, struct r60abd1_mode_arg)
++#define R60ABD1_SET_MODE _IOW('R', 2, struct r60abd1_mode_arg)
++#define R60ABD1_GET_STATUS _IOR('R', 3, struct r60abd1_status)
++#define R60ABD1_GET_STATE _IOWR('R', 4, struct r60abd1_state_arg)
++#define R60ABD1_ENABLE_MONITOR _IOW('R', 5, struct r60abd1_monitor_arg)
++#define R60ABD1_QUERY _IOW('R', 6, struct r60abd1_query_arg)
++
++#endif
